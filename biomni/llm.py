@@ -241,14 +241,42 @@ def get_llm(
             from langchain_aws import ChatBedrock
         except ImportError:
             raise ImportError(  # noqa: B904
-                "langchain-aws package is required for Bedrock models. Install with: pip install langchain-aws"
+                "langchain-aws package is required for Bedrock models. "
+                "Install with: pip install langchain-aws boto3"
             )
-        return ChatBedrock(
-            model=model,
-            temperature=temperature,
-            stop_sequences=stop_sequences,
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
-        )
+        
+        # Get AWS configuration from environment
+        region_name = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+        profile_name = os.getenv("AWS_PROFILE")  # Optional, only for local dev
+        
+        # Build credentials_kwargs for ChatBedrock
+        # ChatBedrock uses boto3 internally and respects AWS SDK credential chain
+        credentials_profile_name = profile_name if profile_name else None
+        
+        try:
+            return ChatBedrock(
+                model=model,
+                temperature=temperature,
+                stop_sequences=stop_sequences,
+                region_name=region_name,
+                credentials_profile_name=credentials_profile_name,
+            )
+        except Exception as e:
+            # Provide helpful error message if authentication fails
+            error_msg = (
+                f"Failed to initialize Bedrock client: {e}\n"
+                f"Region: {region_name}\n"
+                f"Profile: {profile_name or 'default credential chain'}\n\n"
+                "Ensure you have valid AWS credentials configured via:\n"
+                "  - IAM role (recommended for EC2/ECS/EKS/Lambda/SageMaker)\n"
+                "  - AWS_PROFILE environment variable (for local development)\n"
+                "  - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables\n"
+                "  - ~/.aws/credentials file\n\n"
+                f"Also verify that:\n"
+                f"  - Your IAM role/user has bedrock:InvokeModel permission\n"
+                f"  - The model '{model}' is enabled in region '{region_name}'"
+            )
+            raise RuntimeError(error_msg) from e
 
     elif source == "Custom":
         try:

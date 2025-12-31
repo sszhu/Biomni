@@ -95,7 +95,9 @@ GROQ_API_KEY=your_groq_api_key_here
 LLM_SOURCE=your_LLM_source_here
 
 # Optional: AWS Bedrock Configuration (if using AWS Bedrock models)
-AWS_BEARER_TOKEN_BEDROCK=your_bedrock_api_key_here
+# Bedrock uses IAM role authentication (recommended for production)
+# For local development, you can specify an AWS profile:
+# AWS_PROFILE=your_profile_name
 AWS_REGION=us-east-1
 
 # Optional: Custom model serving configuration
@@ -117,8 +119,13 @@ Alternatively, configure your API keys in bash profile `~/.bashrc`:
 export ANTHROPIC_API_KEY="YOUR_API_KEY"
 export OPENAI_API_KEY="YOUR_API_KEY" # optional if you just use Claude
 export OPENAI_ENDPOINT="https://your-resource-name.openai.azure.com/" # optional unless you are using Azure
-export AWS_BEARER_TOKEN_BEDROCK="YOUR_BEDROCK_API_KEY" # optional for AWS Bedrock models
-export AWS_REGION="us-east-1" # optional, defaults to us-east-1 for Bedrock
+
+# For AWS Bedrock: IAM role authentication (recommended)
+# When running on EC2/ECS/EKS/Lambda/SageMaker, credentials are automatic
+# For local development, optionally set:
+export AWS_PROFILE="your_profile_name" # optional for local dev with AWS CLI profiles
+export AWS_REGION="us-east-1" # defaults to us-east-1 if not set
+
 export GEMINI_API_KEY="YOUR_GEMINI_API_KEY" #optional if you want to use a gemini model
 export GROQ_API_KEY="YOUR_GROQ_API_KEY" # Optional: set this to use models served by Groq
 export LLM_SOURCE="Groq" # Optional: set this to use models served by Groq
@@ -131,6 +138,10 @@ export LLM_SOURCE="Groq" # Optional: set this to use models served by Groq
 #### ⚠️ Known Package Conflicts
 
 Some Python packages are not installed by default in the Biomni environment due to dependency conflicts. If you need these features, you must install the packages manually and may need to uncomment relevant code in the codebase. See the up-to-date list and details in [docs/known_conflicts.md](./docs/known_conflicts.md).
+
+#### 🔐 AWS Bedrock Setup
+
+For detailed information on setting up AWS Bedrock with IAM role authentication, see [docs/bedrock_setup.md](./docs/bedrock_setup.md).
 
 ### Basic Usage
 

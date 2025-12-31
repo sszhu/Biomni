@@ -8,10 +8,12 @@ This file lists Python packages that are known to have dependency conflicts with
 - Not installed by default due to dependency conflicts with the main environment.
 - If you need imputation tools that require this package, install it manually in a separate environment or with caution.
 
-### 2. langchain_aws
-- Needed for Amazon Bedrock support.
-- Amazon Bedrock support is present in the codebase, but due to package dependency conflicts, you should install `langchain_aws` only when you need Bedrock support.
-- You must also uncomment the relevant Bedrock support code sections in the codebase to enable this feature.
+### 2. AWS Bedrock Support (langchain_aws + boto3)
+- **Status**: Available with IAM role authentication
+- **Installation**: `pip install langchain-aws boto3`
+- **Note**: Bedrock now uses IAM role-based authentication (no API keys/bearer tokens required)
+- See [docs/bedrock_setup.md](bedrock_setup.md) for detailed setup instructions
+- If you experience dependency conflicts with other packages, install in a separate environment
 
 ### 3. cnvkit
 - **Environment Requirement**: Requires Python 3.10 environment (`bio_env_py310.yml`)

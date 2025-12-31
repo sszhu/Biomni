@@ -92,7 +92,11 @@ ANTHROPIC_API_KEY=your_key
 OPENAI_API_KEY=your_key
 GEMINI_API_KEY=your_key
 GROQ_API_KEY=your_key
-AWS_BEARER_TOKEN_BEDROCK=your_key
+
+# AWS Bedrock Configuration
+# Bedrock uses IAM role authentication (no API keys needed in production)
+# For local development, optionally specify a profile:
+# AWS_PROFILE=your_profile_name
 AWS_REGION=us-east-1
 
 # Azure OpenAI

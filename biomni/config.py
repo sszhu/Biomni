@@ -7,6 +7,7 @@ Maintains full backward compatibility with existing code.
 
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -43,14 +44,19 @@ class BiomniConfig:
     commercial_mode: bool = False  # If True, excludes non-commercial datasets
 
     # Custom model settings (for custom LLM serving)
-    base_url: str | None = None
-    api_key: str | None = None  # Only for custom models, not provider API keys
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None  # Only for custom models, not provider API keys
 
     # LLM source (auto-detected if None)
-    source: str | None = None
+    source: Optional[str] = None
 
     # Third-party integrations
-    protocols_io_access_token: str | None = None
+    protocols_io_access_token: Optional[str] = None
+
+    # AWS Bedrock configuration
+    aws_region: Optional[str] = None
+    aws_profile: Optional[str] = None
+    bedrock_max_retries: int = 5
 
     def __post_init__(self):
         """Load any environment variable overrides if they exist."""
@@ -80,6 +86,16 @@ class BiomniConfig:
         if env_token:
             self.protocols_io_access_token = env_token
 
+        # AWS Bedrock configuration
+        if os.getenv("AWS_REGION"):
+            self.aws_region = os.getenv("AWS_REGION")
+        if os.getenv("AWS_DEFAULT_REGION") and not self.aws_region:
+            self.aws_region = os.getenv("AWS_DEFAULT_REGION")
+        if os.getenv("AWS_PROFILE"):
+            self.aws_profile = os.getenv("AWS_PROFILE")
+        if os.getenv("BIOMNI_BEDROCK_MAX_RETRIES"):
+            self.bedrock_max_retries = int(os.getenv("BIOMNI_BEDROCK_MAX_RETRIES"))
+
     def to_dict(self) -> dict:
         """Convert config to dictionary for easy access."""
         return {
@@ -92,6 +108,9 @@ class BiomniConfig:
             "base_url": self.base_url,
             "api_key": self.api_key,
             "source": self.source,
+            "aws_region": self.aws_region,
+            "aws_profile": self.aws_profile,
+            "bedrock_max_retries": self.bedrock_max_retries,
         }
 
 
