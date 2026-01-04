@@ -6,6 +6,7 @@ statsmodels
 scikit-learn
 gradio
 langchain
+langchain-core
 langgraph==0.3.18
 langchain-openai
 langchain-anthropic
@@ -13,6 +14,7 @@ langchain-ollama
 langchain-community
 langchain_aws
 boto3
+botocore
 openai
 beautifulsoup4
 lxml
@@ -25,6 +27,7 @@ jupyter
 notebook
 ipykernel
 pytest
+pytest-cov
 transformers
 sentencepiece
 mcp
