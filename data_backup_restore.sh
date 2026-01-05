@@ -441,7 +441,7 @@ case "$ACTION" in
             PROVIDER="$detected"
           fi
           
-          if [[ "$1" == *.tar.gz ]]; then
+          if [[ "$1" == *.tar.gz || "$1" == *.tar ]]; then
             TARBALL_URI="$1"
           else
             CLOUD_SEARCH_PREFIX="$1"

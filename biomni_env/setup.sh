@@ -17,6 +17,12 @@ TOOLS_DIR=""
 echo -e "${YELLOW}=== Biomni Environment Setup ===${NC}"
 echo -e "${BLUE}This script will set up a comprehensive bioinformatics environment with various tools and packages.${NC}"
 
+# Paths
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+RESTORE=false
+RESTORE_URI=""
 
 # Parse flags
 NO_R=false
@@ -26,6 +32,16 @@ while [[ $# -gt 0 ]]; do
         --no-r)
             NO_R=true
             shift
+            ;;
+        --restore)
+            RESTORE=true
+            # Optional URI argument (s3:// or cos://)
+            if [[ ${2:-} =~ ^s3://|^cos:// ]]; then
+                RESTORE_URI="$2"
+                shift 2
+            else
+                shift
+            fi
             ;;
         --no-python)
             NO_PYTHON=true
@@ -415,6 +431,30 @@ main() {
 
     # Finalize shell profile configuration (ensures R_LIBS_USER is set even if CLI tools skipped)
     configure_shell_profile
+
+    # If repo root has no top-level data directory, attempt automatic restore using defaults
+    if [ ! -d "$REPO_ROOT/data" ]; then
+        echo -e "\n${YELLOW}No top-level 'data' directory found in repo root (${REPO_ROOT}). Attempting restore...${NC}"
+        if [ -f "$REPO_ROOT/data_backup_restore.sh" ]; then
+            (cd "$REPO_ROOT" && bash ./data_backup_restore.sh restore) || echo -e "${RED}Automatic restore failed. You can run it manually from ${REPO_ROOT}.${NC}"
+        else
+            echo -e "${RED}data_backup_restore.sh not found in repo root; skipping auto-restore.${NC}"
+        fi
+    fi
+
+    # If --restore was provided, force a restore now (overrides presence of data dir)
+    if [ "$RESTORE" = true ]; then
+        echo -e "\n${YELLOW}--restore flag detected: running data restore from repo root...${NC}"
+        if [ -f "$REPO_ROOT/data_backup_restore.sh" ]; then
+            if [ -n "$RESTORE_URI" ]; then
+                (cd "$REPO_ROOT" && bash ./data_backup_restore.sh restore "$RESTORE_URI") || echo -e "${RED}Explicit restore failed. Please rerun manually.${NC}"
+            else
+                (cd "$REPO_ROOT" && bash ./data_backup_restore.sh restore) || echo -e "${RED}Restore failed. Please rerun manually.${NC}"
+            fi
+        else
+            echo -e "${RED}data_backup_restore.sh not found in repo root; cannot perform --restore.${NC}"
+        fi
+    fi
 }
 
 # Run the main installation process
