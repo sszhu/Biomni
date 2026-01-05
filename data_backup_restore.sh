@@ -28,6 +28,7 @@ Options:
   --keep-local          Leave the generated tarball on disk after uploading (backup only)
   --target-dir PATH     Extract into a different directory (restore only)
   --dry-run            Show what would be done without executing
+  --no-compress        Create an uncompressed .tar (default is compressed .tar.gz; backup only)
   -h, --help           Show this help message
 
 Environment Variables:
@@ -35,6 +36,7 @@ Environment Variables:
   CLOUD_PROVIDER=cos         Sets default provider (aws or cos)
   DEFAULT_S3_PREFIX          Default S3 destination/search prefix
   DEFAULT_COS_PREFIX         Default COS destination/search prefix
+  COMPRESS_TARBALL=true      Set to 'false' to default to uncompressed tar
 
 URI Formats:
   AWS S3:         s3://bucket/prefix
@@ -205,11 +207,12 @@ find_latest_tarball_uri() {
 
   case "$provider" in
     aws)
-      local query='sort_by(Contents,&LastModified)[?ends_with(Key, `tar.gz`)] | [-1].Key'
+      # Find latest file ending with .tar.gz or .tar
+      local query='sort_by(Contents,&LastModified)[?ends_with(Key, `tar.gz`) || ends_with(Key, `tar`)] | [-1].Key'
       local latest_key
       latest_key="$(aws s3api list-objects-v2 --bucket "$CLOUD_BUCKET" --prefix "$key_prefix" --output text --query "$query")"
       if [[ -z "$latest_key" || "$latest_key" == "None" ]]; then
-        echo "No tar.gz objects found under $search_prefix" >&2
+        echo "No tar(.gz) objects found under $search_prefix" >&2
         return 1
       fi
       echo "s3://$CLOUD_BUCKET/$latest_key"
@@ -217,13 +220,13 @@ find_latest_tarball_uri() {
     cos)
       # List files and find latest .tar.gz
       local temp_list="$(mktemp)"
-      cos ls "${search_prefix%/}/" --output text 2>/dev/null | grep '\.tar\.gz$' | sort > "$temp_list" || true
+      cos ls "${search_prefix%/}/" --output text 2>/dev/null | grep -E '\.tar(\.gz)?$' | sort > "$temp_list" || true
       local latest_file
       latest_file="$(tail -n 1 "$temp_list")"
       rm -f "$temp_list"
       
       if [[ -z "$latest_file" ]]; then
-        echo "No tar.gz objects found under $search_prefix" >&2
+        echo "No tar(.gz) objects found under $search_prefix" >&2
         return 1
       fi
       
@@ -294,6 +297,7 @@ case "$ACTION" in
     CLOUD_PREFIX=""
     KEEP_LOCAL="${KEEP_LOCAL_TARBALL:-false}"
     DRY_RUN="false"
+    COMPRESS="${COMPRESS_TARBALL:-true}"
 
     while [[ $# -gt 0 ]]; do
       case "$1" in
@@ -307,6 +311,10 @@ case "$ACTION" in
           ;;
         --keep-local)
           KEEP_LOCAL="true"
+          shift
+          ;;
+        --no-compress)
+          COMPRESS="false"
           shift
           ;;
         --dry-run)
@@ -363,7 +371,11 @@ case "$ACTION" in
     fi
 
     TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-    TARBALL_NAME="data_directories_${TIMESTAMP}.tar.gz"
+    if [[ "$COMPRESS" == "true" ]]; then
+      TARBALL_NAME="data_directories_${TIMESTAMP}.tar.gz"
+    else
+      TARBALL_NAME="data_directories_${TIMESTAMP}.tar"
+    fi
     TARBALL_PATH="$CURRENT_DIR/$TARBALL_NAME"
 
     echo "Provider: $PROVIDER"
@@ -375,7 +387,11 @@ case "$ACTION" in
       echo "[DRY-RUN] Would create: $TARBALL_PATH"
       echo "[DRY-RUN] Would include ${#data_dirs[@]} directories"
     else
-      tar -czf "$TARBALL_PATH" -C "$CURRENT_DIR" "${data_dirs[@]}"
+      if [[ "$COMPRESS" == "true" ]]; then
+        tar -czf "$TARBALL_PATH" -C "$CURRENT_DIR" "${data_dirs[@]}"
+      else
+        tar -cf "$TARBALL_PATH" -C "$CURRENT_DIR" "${data_dirs[@]}"
+      fi
       echo "Tarball created at $TARBALL_PATH"
     fi
 
@@ -489,7 +505,11 @@ case "$ACTION" in
       echo "[DRY-RUN] Would extract to: $TARGET_DIR"
     else
       echo "Extracting into $TARGET_DIR"
-      tar -xzf "$LOCAL_TARBALL" -C "$TARGET_DIR"
+      case "$LOCAL_TARBALL" in
+        *.tar.gz) tar -xzf "$LOCAL_TARBALL" -C "$TARGET_DIR" ;;
+        *.tar) tar -xf "$LOCAL_TARBALL" -C "$TARGET_DIR" ;;
+        *) echo "Unsupported archive format: $LOCAL_TARBALL" >&2; exit 1 ;;
+      esac
       echo "Restore complete."
     fi
     ;;
