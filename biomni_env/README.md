@@ -12,7 +12,7 @@ This directory contains scripts and configuration files to set up a comprehensiv
 - (a) If you want to use or try out the basic agent without the full E1 or install your own softwares, run the following script:
 
 ```bash
-conda env create -f environment.yml
+micromamba env create -n biomni_e1 -f environment.yml
 ```
 
 - (b) If you want to use the full environment E1, run the setup script (this script takes > 10 hours to setup, and requires a disk of at least 30 GB quota). Follow the prompts to install the desired components.
@@ -32,10 +32,10 @@ Note: we have only tested this setup.sh script with Ubuntu 22.04, 64 bit.
 - (c) If you want to use a reduced conda environment without R or CLI tools, run the following script:
 
 ```bash
-conda env create -f fixed_env.yml
+micromamba env create -n biomni_e1 -f environment.yml
 ```
 
-This contains most of the packages from environment.yml and bio_env.yml, and requires a disk of at elast 13GB quota.
+This single merged environment.yml contains the packages from the previous environment.yml, bio_env.yml, and r_packages.yml. It requires a disk quota of at least ~13GB for the reduced set and more for full E1 via setup.sh.
 
 - (d) **Python 3.10 Environment for Copy Number Analysis**: If you specifically need to use the `analyze_copy_number_purity_ploidy_and_focal_events` function, we provide a Python 3.10 environment option. This function has specific dependency requirements that are best met with Python 3.10. To set up this environment:
 
@@ -47,7 +47,21 @@ This environment is optimized for copy number variation analysis and includes th
 
 3. Lastly, to activate the biomni environment:
 ```bash
-conda activate biomni_e1
+eval "$(micromamba shell hook --shell zsh)"
+micromamba activate biomni_e1
+```
+
+On Linux, if you use bash, activate via:
+
+```bash
+eval "$(micromamba shell hook --shell bash)"
+micromamba activate biomni_e1
+```
+
+After activation, Python packages are installed via `uv` from `requirements.txt` for speed:
+
+```bash
+uv pip install -r requirements.txt
 ```
 
 For the Python 3.10 environment specifically:

@@ -1,39 +1,23 @@
 name: biomni_e1
 channels:
   - conda-forge
-  - defaults
   - bioconda
+  - defaults
 dependencies:
+  # Core language and tooling
   - python=3.11
-  - pip
-  - pip:
-      - numpy
-      - pandas
-      - matplotlib
-      - scipy
-      - statsmodels
-      - scikit-learn
-      - gradio
-      - langchain
-      - langgraph==0.3.18
-      - langchain-openai
-      - langchain-anthropic
-      - langchain-ollama
-      - langchain-community
-      - openai
-      - beautifulsoup4
-      - lxml
-      - tqdm
-      - seaborn
-      - networkx
-      - requests
-      - pyyaml
-      - jupyter
-      - notebook
-      - ipykernel
-      - pytest
-      - transformers
-      - sentencepiece
-      - mcp
-      - tooluniverse
-      - python-dotenv
+  # R environment
+  - r-base>=4.4
+  - r-essentials
+  # Bioinformatics tools (conda packages)
+  # - blast
+  - samtools
+  - bowtie2
+  # - bwa
+  - bedtools
+  - fastqc
+  - trimmomatic
+  - mafft
+  - gseapy
+  # - mageck    # uncomment if available in your channels
+  # - plannotate  # uncomment if available in your channels
