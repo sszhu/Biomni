@@ -29,9 +29,15 @@ pytest
 pytest-cov
 transformers
 sentencepiece
+langchain-google-genai
 mcp
 tooluniverse
 python-dotenv
+pybiomart
+fair-esm
+lazyslide
+transcriptformer
+zarr>=2.0,<3.0
 scanpy
 biopython
 biopandas
@@ -44,6 +50,7 @@ cryosparc-tools
 lifelines
 scikit-image
 googlesearch-python
+mi-googlesearch-python
 PyPDF2
 gget
 faiss-cpu
@@ -83,3 +90,8 @@ cyvcf2
 pykalman
 community
 fanc
+nnunet
+nibabel
+nilearn
+git+https://github.com/pylabrobot/pylabrobot.git
+git+https://github.com/YosefLab/popV.git@refs/pull/100/head

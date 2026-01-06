@@ -10,12 +10,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default tools directory is the current directory
-DEFAULT_TOOLS_DIR="$(pwd)/biomni_tools"
-TOOLS_DIR=""
-
 echo -e "${YELLOW}=== Biomni Environment Setup ===${NC}"
 echo -e "${BLUE}This script will set up a comprehensive bioinformatics environment with various tools and packages.${NC}"
+
+# Set default to non-interactive mode
+NON_INTERACTIVE=${NON_INTERACTIVE:-true}
 
 # Function to handle errors (defined early for use in installers)
 handle_error() {
@@ -49,6 +48,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RESTORE=false
 RESTORE_URI=""
+
+# Default tools directory is the current directory
+DEFAULT_TOOLS_DIR="$(pwd)/biomni_tools"
+TOOLS_DIR=""
 
 # Parse flags
 NO_R=false
@@ -259,6 +262,23 @@ PY
     fi
 }
 
+# Optionally install uv CLI tools introduced in v0.0.8
+install_uv_tools() {
+    if command -v uv &> /dev/null; then
+        echo -e "${YELLOW}Installing uv CLI tools (arc-state)...${NC}"
+        uv tool install arc-state || echo -e "${YELLOW}Skipping arc-state if unavailable.${NC}"
+    fi
+}
+
+# Configure Git LFS if git is available
+configure_git_lfs() {
+    # sudo apt-get install git-lfs
+    if command -v git &> /dev/null; then
+        echo -e "${YELLOW}Configuring Git LFS...${NC}"
+        git lfs install || echo -e "${YELLOW}Git LFS install step skipped or failed.${NC}"
+    fi
+}
+
 # Ensure pandas can import; if it fails, switch to conda-forge builds
 ensure_pandas_compat() {
     if command -v python3 &> /dev/null; then
@@ -363,24 +383,6 @@ install_cli_tools() {
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Successfully installed command-line tools!${NC}"
-
-        # Create a setup_path.sh file in the current directory
-        echo "#!/bin/bash" > setup_path.sh
-        echo "# Added by biomni setup" >> setup_path.sh
-        echo "# Remove any old paths first to avoid duplicates" >> setup_path.sh
-        echo "PATH=\$(echo \$PATH | tr ':' '\n' | grep -v \"biomni_tools/bin\" | tr '\n' ':' | sed 's/:$//')" >> setup_path.sh
-        echo "export PATH=\"$TOOLS_DIR/bin:\$PATH\"" >> setup_path.sh
-        chmod +x setup_path.sh
-
-        echo -e "${GREEN}Created setup_path.sh in the current directory.${NC}"
-        echo -e "${YELLOW}You can add the tools to your PATH by running:${NC}"
-        echo -e "${GREEN}source $(pwd)/setup_path.sh${NC}"
-
-        # Also add to the current session
-        # Remove any old paths first to avoid duplicates
-        PATH=$(echo $PATH | tr ':' '\n' | grep -v "biomni_tools/bin" | tr '\n' ':' | sed 's/:$//')
-        export PATH="$TOOLS_DIR/bin:$PATH"
-
         # Persist PATH and R library settings in shell profile
         configure_shell_profile
     fi
@@ -468,7 +470,7 @@ main() {
     elif command -v Rscript &> /dev/null; then
         export R_LIBS_USER="$HOME/.local/R/library"
         mkdir -p "$R_LIBS_USER"
-        Rscript install_r_packages.R
+        Rscript $SCRIPT_DIR/install_r_packages.R
         handle_error $? "Failed to install additional R packages." true
     else
         echo -e "${YELLOW}Rscript not found in the environment; skipping optional R package installation.${NC}"
@@ -494,6 +496,10 @@ main() {
 
     # Ensure packaging is present for langchain_core
     ensure_packaging
+
+    # Install uv CLI tools and configure Git LFS
+    install_uv_tools
+    configure_git_lfs
 
     # Verify pandas import; if it fails, install conda-forge builds
     ensure_pandas_compat
