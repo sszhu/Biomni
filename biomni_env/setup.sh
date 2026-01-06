@@ -93,61 +93,12 @@ install_micromamba() {
             echo -e "${GREEN}micromamba installed via installer at $(command -v micromamba)${NC}"
             return 0
         fi
-        echo -e "${YELLOW}Installer completed but micromamba not on PATH; attempting fallbacks...${NC}"
+        echo -e "${YELLOW}Installer completed but micromamba not on PATH;${NC}"
     else
-        echo -e "${YELLOW}Installer script failed; attempting fallbacks...${NC}"
+        echo -e "${YELLOW}Installer script failed;${NC}"
     fi
 
-    # Fallbacks
-    # Determine platform tag for direct binary methods (linux-64, linux-aarch64, osx-64, osx-arm64)
-    local uname_s uname_m platform_tag
-    uname_s=$(uname -s)
-    uname_m=$(uname -m)
-    case "$uname_s" in
-        Linux)
-            case "$uname_m" in
-                x86_64|amd64) platform_tag="linux-64" ;;
-                aarch64|arm64) platform_tag="linux-aarch64" ;;
-                *) platform_tag="linux-64" ;;
-            esac ;;
-        Darwin)
-            case "$uname_m" in
-                x86_64) platform_tag="osx-64" ;;
-                arm64) platform_tag="osx-arm64" ;;
-                *) platform_tag="osx-64" ;;
-            esac ;;
-        *) platform_tag="linux-64" ;;
-    esac
-
-    local dest_dir="$HOME/.local/bin"
-    mkdir -p "$dest_dir"
-
-    # Fallback 1: Direct binary from GitHub releases
-    local gh_url="https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-${platform_tag}"
-    if curl -L -o "$dest_dir/micromamba" "$gh_url" && chmod +x "$dest_dir/micromamba"; then
-        export PATH="$dest_dir:$PATH"
-        if command -v micromamba &> /dev/null; then
-            echo -e "${GREEN}micromamba installed via GitHub releases at $(command -v micromamba)${NC}"
-            return 0
-        fi
-    else
-        echo -e "${YELLOW}GitHub release fallback failed; checking conda-based install...${NC}"
-    fi
-
-    # Fallback 2: Install via conda if available
-    if command -v conda &> /dev/null; then
-        echo -e "${YELLOW}Attempting 'conda install -n base -c conda-forge micromamba'...${NC}"
-        conda install -n base -c conda-forge -y micromamba || true
-        if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/bin" ]; then
-            export PATH="$CONDA_PREFIX/bin:$PATH"
-        fi
-        if command -v micromamba &> /dev/null; then
-            echo -e "${GREEN}micromamba installed via conda at $(command -v micromamba)${NC}"
-            return 0
-        fi
-    fi
-
-    echo -e "${RED}micromamba installation did not succeed via installer or fallbacks. Please install manually: https://mamba.readthedocs.io${NC}"
+    echo -e "${RED}micromamba installation did not succeed via installer. Please install manually: https://mamba.readthedocs.io${NC}"
     return 1
 }
 
@@ -204,12 +155,12 @@ configure_shell_profile() {
     local local_bin="$HOME/.local/bin"
     local local_bin_line="export PATH=\"$local_bin:\$PATH\""
     mkdir -p "$local_bin"
-    if ! grep -q "$local_bin" "$profile_file" && ! grep -Fq "$local_bin_line" "$profile_file"; then
+    if ! grep -q "$local_bin:" "$profile_file" && ! grep -Fq "$local_bin_line" "$profile_file"; then
         echo "# Biomni: user-local bin path (micromamba/uv)" >> "$profile_file"
         echo "$local_bin_line" >> "$profile_file"
-        echo -e "${GREEN}Added ~/.local/bin to PATH in $profile_file${NC}"
+        echo -e "${GREEN}Added $local_bin to PATH in $profile_file${NC}"
     else
-        echo -e "${YELLOW}~/.local/bin already present in PATH in $profile_file${NC}"
+        echo -e "${YELLOW} $local_bin already present in PATH in $profile_file${NC}"
     fi
 }
 
@@ -231,37 +182,6 @@ ensure_r_in_env() {
     fi
 }
 
-# Ensure C++ runtime libraries are present (fixes GLIBCXX runtime errors)
-ensure_cxx_runtime_libs() {
-    if [[ "$(uname)" != "Darwin" ]]; then
-        echo -e "${YELLOW}Ensuring C++ runtime libraries (libstdcxx-ng, libgcc-ng) are installed...${NC}"
-        micromamba install -y -n biomni_e1 -c conda-forge libstdcxx-ng libgcc-ng
-        handle_error $? "Failed to install C++ runtime libraries (libstdcxx-ng, libgcc-ng)." true
-    fi
-}
-
-# Ensure 'packaging' module is available for Python libs (langchain_core dependency)
-ensure_packaging() {
-    if command -v python3 &> /dev/null; then
-        python3 - <<'PY'
-try:
-    import packaging
-    print("packaging ready")
-except Exception as e:
-    raise SystemExit(1)
-PY
-        if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}Installing missing 'packaging' module...${NC}"
-            env_python=$(which python3)
-            if command -v uv &> /dev/null; then
-                uv pip install --python "$env_python" packaging
-            else
-                python3 -m pip install -U packaging
-            fi
-        fi
-    fi
-}
-
 # Optionally install uv CLI tools introduced in v0.0.8
 install_uv_tools() {
     if command -v uv &> /dev/null; then
@@ -279,29 +199,6 @@ configure_git_lfs() {
     fi
 }
 
-# Ensure pandas can import; if it fails, switch to conda-forge builds
-ensure_pandas_compat() {
-    if command -v python3 &> /dev/null; then
-        python3 - <<'PY'
-import sys
-try:
-    import pandas as pd
-    print("Pandas ready:", pd.__version__)
-    sys.exit(0)
-except Exception as e:
-    print("Pandas import failed:", e)
-    sys.exit(1)
-PY
-        if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}Reinstalling pandas/numpy/scipy via conda-forge to resolve binary compatibility...${NC}"
-            # Uninstall pip versions if present
-            python3 -m pip uninstall -y pandas numpy scipy >/dev/null 2>&1 || true
-            micromamba clean --all -y || true
-            micromamba install -y -n biomni_e1 --override-channels -c conda-forge pandas numpy scipy
-        fi
-    fi
-}
-
 # Ensure micromamba is available
 configure_shell_profile
 if ! command -v micromamba &> /dev/null; then
@@ -315,9 +212,6 @@ fi
 if ! command -v uv &> /dev/null; then
     install_uv
 fi
-
-# (handler defined earlier)
-
 
 # Function to install a specific environment file using micromamba
 install_env_file() {
@@ -398,32 +292,17 @@ main() {
     # Step 1: Create base micromamba environment from merged environment.yml
     echo -e "\n${YELLOW}Step 1: Creating base environment using micromamba...${NC}"
     create_ok=0
-    if [ "$NO_R" = true ]; then
-        echo -e "${YELLOW}--no-r flag: creating environment via explicit package list (no R).${NC}"
-        for attempt in 1 2; do
-            micromamba create -y -n biomni_e1 -c conda-forge -c bioconda \
-                python=3.11 blast samtools bowtie2 bwa bedtools fastqc trimmomatic mafft gseapy
-            if [ $? -eq 0 ]; then
-                create_ok=1
-                break
-            else
-                echo -e "${RED}Micromamba create failed (attempt $attempt). Cleaning cache and retrying...${NC}"
-                micromamba clean --all -y
-            fi
-        done
-    else
-        env_spec_file="environment.yml"
-        for attempt in 1 2; do
-            micromamba env create -y -n biomni_e1 -f "$env_spec_file"
-            if [ $? -eq 0 ]; then
-                create_ok=1
-                break
-            else
-                echo -e "${RED}Micromamba env create failed (attempt $attempt). Cleaning cache and retrying...${NC}"
-                micromamba clean --all -y
-            fi
-        done
-    fi
+    env_spec_file="$SCRIPT_DIR/environment.yml"
+    for attempt in 1 2; do
+        micromamba env create -y -n biomni_e1 -f "$env_spec_file"
+        if [ $? -eq 0 ]; then
+            create_ok=1
+            break
+        else
+            echo -e "${RED}Micromamba env create failed (attempt $attempt). Cleaning cache and retrying...${NC}"
+            micromamba clean --all -y
+        fi
+    done
     if [ $create_ok -ne 1 ]; then
         echo -e "${YELLOW}Falling back to minimal environment via explicit package list...${NC}"
         micromamba create -y -n biomni_e1 -c conda-forge -c bioconda python=3.11
@@ -460,9 +339,6 @@ main() {
         echo -e "${YELLOW}--no-r flag: skipping R auto-install.${NC}"
     fi
 
-    # Ensure C++ runtime libraries for Python wheels needing newer GLIBCXX
-    ensure_cxx_runtime_libs
-
     # Step 3: Install additional R packages through R's package manager (optional)
     echo -e "\n${YELLOW}Step 3: Installing additional R packages through R's package manager...${NC}"
     if [ "$NO_R" = true ]; then
@@ -481,11 +357,8 @@ main() {
         echo -e "\n${YELLOW}Step 4: Installing Python packages with uv...${NC}"
         if command -v python3 &> /dev/null; then
             env_python=$(which python3)
-            # Filter out packages provided by conda to avoid ABI conflicts
-            tmp_req="$SCRIPT_DIR/.requirements.no-conda.txt"
-            grep -Ev '^(pandas|numpy|scipy)([=<>]|$)' "$SCRIPT_DIR/requirements.txt" > "$tmp_req"
-            uv pip install --python "$env_python" -r "$tmp_req"
-            rm -f "$tmp_req"
+            uv pip install --python "$env_python" -r "$SCRIPT_DIR/requirements.txt"
+            uv pip install --python "$env_python" numpy==2.4.0
             handle_error $? "Failed to install Python packages with uv." false
         else
             echo -e "${RED}Python interpreter not found in the activated environment; skipping uv installation.${NC}"
@@ -493,16 +366,14 @@ main() {
     elif [ -f "$SCRIPT_DIR/requirements.txt" ] && [ "$NO_PYTHON" = true ]; then
         echo -e "${YELLOW}--no-python flag: skipping uv Python package installation.${NC}"
     fi
-
-    # Ensure packaging is present for langchain_core
-    ensure_packaging
+    # ### override pandas, numpy, scipy to ensure conda-forge versions
+    # echo -e "\n${YELLOW}Overriding pandas, numpy, scipy with conda-forge versions...${NC}"
+    # micromamba remove -y -n biomni_e1 pandas numpy scipy || true
+    # micromamba install -y -n biomni_e1 --override-channels -c conda-forge pandas numpy scipy requests packaging
 
     # Install uv CLI tools and configure Git LFS
     install_uv_tools
     configure_git_lfs
-
-    # Verify pandas import; if it fails, install conda-forge builds
-    ensure_pandas_compat
 
     # Step 5: Install CLI tools
     echo -e "\n${YELLOW}Step 5: Installing command-line bioinformatics tools...${NC}"
@@ -518,9 +389,6 @@ main() {
     if [ -n "$TOOLS_DIR" ]; then
         echo -e "\n${BLUE}=== Command-Line Tools Setup ===${NC}"
         echo -e "The command-line tools are installed in: ${YELLOW}$TOOLS_DIR${NC}"
-        echo -e "To add these tools to your PATH, run: ${YELLOW}source $(pwd)/setup_path.sh${NC}"
-        echo -e "You can also add this line to your shell profile for permanent access:"
-        echo -e "${GREEN}export PATH=\"$TOOLS_DIR/bin:\$PATH\"${NC}"
 
         # Test if tools are accessible
         echo -e "\n${BLUE}=== Testing CLI Tools ===${NC}"
@@ -529,7 +397,6 @@ main() {
             echo -e "PLINK2 location: $(which plink2)"
         else
             echo -e "${RED}PLINK2 is not accessible in the current PATH${NC}"
-            echo -e "Please run: ${YELLOW}source $(pwd)/setup_path.sh${NC} to update your PATH"
         fi
 
         if command -v gcta64 &> /dev/null; then
@@ -537,7 +404,6 @@ main() {
             echo -e "GCTA location: $(which gcta64)"
         else
             echo -e "${RED}GCTA is not accessible in the current PATH${NC}"
-            echo -e "Please run: ${YELLOW}source $(pwd)/setup_path.sh${NC} to update your PATH"
         fi
 
         if command -v iqtree2 &> /dev/null; then
@@ -545,7 +411,6 @@ main() {
             echo -e "IQ-TREE location: $(which iqtree2)"
         else
             echo -e "${RED}IQ-TREE is not accessible in the current PATH${NC}"
-            echo -e "Please run: ${YELLOW}source $(pwd)/setup_path.sh${NC} to update your PATH"
         fi
     fi
 

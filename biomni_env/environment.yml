@@ -6,14 +6,10 @@ channels:
 dependencies:
   # Core language and tooling
   - python=3.11
-  # R environment
-  - r-base>=4.4
-  - r-essentials
   # Bioinformatics tools (conda packages)
-  # - blast
+  - blast
   - samtools
   - bowtie2
-  # - bwa
   - bedtools
   - fastqc
   - trimmomatic
@@ -21,7 +17,10 @@ dependencies:
   - gseapy
   # - mageck    # uncomment if available in your channels
   # - plannotate  # uncomment if available in your channels
-
+  - pandas
+  - numpy
+  - scipy
+  - jq
   # New software v0.0.8 (conda-managed)
   - weasyprint
   - git-lfs
