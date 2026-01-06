@@ -6,6 +6,9 @@ channels:
 dependencies:
   # Core language and tooling
   - python=3.11
+  # R environment
+  - r-base>=4.4
+  - r-essentials
   # Bioinformatics tools (conda packages)
   - blast
   - samtools
@@ -20,6 +23,38 @@ dependencies:
   - pandas
   - numpy
   - scipy
+    # R packages (conda-managed for speed and reproducibility)
+    # CRAN-equivalents from conda-forge
+  - r-ggplot2
+  - r-lme4
+  - r-dplyr
+  - r-tidyr
+  - r-readr
+  - r-stringr
+  - r-matrix
+  - r-rcpp
+  - r-devtools
+  - r-remotes
+  - r-harmony
+  - r-fastcluster
+  - r-matrixstats
+  - r-hmisc
+  - r-foreach
+  - r-doparallel
+  - r-wgcna
+  - r-pak
+  # Bioconductor packages from bioconda/conda-forge
+  - bioconductor-deseq2
+  - bioconductor-dada2
+  - bioconductor-xcms
+  - bioconductor-flowcore
+  - bioconductor-edger
+  - bioconductor-limma
+  - bioconductor-impute
+  - bioconductor-preprocesscore
+  - bioconductor-go.db
+  - bioconductor-annotationdbi
+  - bioconductor-clusterprofiler
   - jq
   # New software v0.0.8 (conda-managed)
   - weasyprint

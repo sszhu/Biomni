@@ -54,14 +54,9 @@ DEFAULT_TOOLS_DIR="$(pwd)/biomni_tools"
 TOOLS_DIR=""
 
 # Parse flags
-NO_R=false
 NO_PYTHON=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --no-r)
-            NO_R=true
-            shift
-            ;;
         --restore)
             RESTORE=true
             # Optional URI argument (s3:// or cos://)
@@ -170,15 +165,6 @@ ensure_python_in_env() {
         echo -e "${YELLOW}Python not found in env; installing python=3.11...${NC}"
         micromamba install -y -n biomni_e1 python=3.11
         handle_error $? "Failed to install Python into biomni_e1 environment." false
-    fi
-}
-
-# Ensure R is installed in the environment
-ensure_r_in_env() {
-    if ! command -v Rscript &> /dev/null; then
-        echo -e "${YELLOW}R not found in env; installing r-base and r-essentials...${NC}"
-        micromamba install -y -n biomni_e1 r-base r-essentials
-        handle_error $? "Failed to install R into biomni_e1 environment." true
     fi
 }
 
@@ -304,9 +290,8 @@ main() {
         fi
     done
     if [ $create_ok -ne 1 ]; then
-        echo -e "${YELLOW}Falling back to minimal environment via explicit package list...${NC}"
-        micromamba create -y -n biomni_e1 -c conda-forge -c bioconda python=3.11
-        handle_error $? "Failed to create micromamba environment in fallback mode."
+        echo -e "${YELLOW}Environment creation failed after retries; skipping and continuing.${NC}"
+        handle_error 1 "Failed to create micromamba environment biomni_e1." true
     fi
 
     # Step 2: Activate the environment
@@ -333,23 +318,21 @@ main() {
     else
         echo -e "${YELLOW}--no-python flag: skipping Python auto-install.${NC}"
     fi
-    if [ "$NO_R" != true ]; then
-        ensure_r_in_env
-    else
-        echo -e "${YELLOW}--no-r flag: skipping R auto-install.${NC}"
-    fi
 
     # Step 3: Install additional R packages through R's package manager (optional)
-    echo -e "\n${YELLOW}Step 3: Installing additional R packages through R's package manager...${NC}"
-    if [ "$NO_R" = true ]; then
-        echo -e "${YELLOW}--no-r flag: skipping optional R package installation.${NC}"
-    elif command -v Rscript &> /dev/null; then
-        export R_LIBS_USER="$HOME/.local/R/library"
-        mkdir -p "$R_LIBS_USER"
-        Rscript $SCRIPT_DIR/install_r_packages.R
-        handle_error $? "Failed to install additional R packages." true
+    if [ -n "$INSTALL_R_PACKAGES" ]; then
+        echo -e "${YELLOW}Step 3: Installing additional R packages through R's package manager...${NC}"
+        if command -v Rscript &> /dev/null; then
+                export R_LIBS_USER="$HOME/.local/R/library"
+                mkdir -p "$R_LIBS_USER"
+                echo -e "${YELLOW}INSTALL_R_PACKAGES set: running install_r_packages.R for any extras...${NC}"
+                Rscript "$SCRIPT_DIR/install_r_packages.R"
+                handle_error $? "Failed to install additional R packages." true
+        else
+            echo -e "${YELLOW}Rscript not found in the environment; skipping optional R package installation.${NC}"
+        fi
     else
-        echo -e "${YELLOW}Rscript not found in the environment; skipping optional R package installation.${NC}"
+        echo -e "${YELLOW}Skipping CRAN/Bioconductor installs (packages are managed via conda). Set INSTALL_R_PACKAGES=1 to run R installs.${NC}"
     fi
 
     # Step 4: Install Python packages with uv (if requirements.txt exists)
