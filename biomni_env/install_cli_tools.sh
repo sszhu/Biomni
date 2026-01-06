@@ -9,6 +9,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Check for wget or fallback to curl
 if command -v wget &> /dev/null; then
   DOWNLOADER="wget -v -O"
@@ -20,6 +22,24 @@ else
   echo -e "${YELLOW}Please install one of them (e.g., brew install wget on macOS).${NC}"
   exit 1
 fi
+
+# Helper: download with certificate-ignore fallback
+download_with_fallback() {
+        local out="$1"
+        local url="$2"
+        if command -v wget &> /dev/null; then
+                wget -v -O "$out" "$url" || {
+                        echo -e "${YELLOW}Initial download failed; retrying with --no-check-certificate...${NC}"
+                        wget --no-check-certificate -v -O "$out" "$url"
+                }
+        else
+                # Use curl
+                curl -L -o "$out" "$url" || {
+                        echo -e "${YELLOW}Initial download failed; retrying with insecure TLS (-k)...${NC}"
+                        curl -L -k -o "$out" "$url"
+                }
+        fi
+}
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
@@ -103,7 +123,7 @@ echo "hash -r 2>/dev/null || rehash 2>/dev/null || true" >> "$TOOLS_DIR/setup_pa
 chmod +x "$TOOLS_DIR/setup_path.sh"
 
 # Config file path
-CONFIG_FILE="cli_tools_config.json"
+CONFIG_FILE="$SCRIPT_DIR/cli_tools_config.json"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -144,7 +164,7 @@ install_tool() {
         echo -e "${YELLOW}Installing HOMER via Perl script...${NC}"
 
         # Download the configuration script directly to the bin directory
-        $DOWNLOADER "$TOOLS_DIR/bin/configureHomer.pl" "$download_url"
+        download_with_fallback "$TOOLS_DIR/bin/configureHomer.pl" "$download_url"
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Failed to download HOMER configuration script from $download_url${NC}"
@@ -201,7 +221,7 @@ install_tool() {
         echo -e "${YELLOW}Installing FastTree from source...${NC}"
 
         # Download the source
-        $DOWNLOADER "$TOOLS_DIR/$tool_dir_name/FastTree.c" "$download_url"
+        download_with_fallback "$TOOLS_DIR/$tool_dir_name/FastTree.c" "$download_url"
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Failed to download FastTree source from $download_url${NC}"
@@ -298,7 +318,7 @@ install_tool() {
     # Determine file extension
     if [[ "$download_url" == *".zip" ]]; then
         # Use verbose output to help diagnose issues
-        $DOWNLOADER "$TOOLS_DIR/$tool_dir_name.zip" "$download_url"
+        download_with_fallback "$TOOLS_DIR/$tool_dir_name.zip" "$download_url"
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Failed to download $tool_name from $download_url${NC}"
@@ -319,7 +339,7 @@ install_tool() {
         rm "$TOOLS_DIR/$tool_dir_name.zip"
     elif [[ "$download_url" == *".tar.gz" ]]; then
         # Use verbose output to help diagnose issues
-        $DOWNLOADER "$TOOLS_DIR/$tool_dir_name.tar.gz" "$download_url"
+        download_with_fallback "$TOOLS_DIR/$tool_dir_name.tar.gz" "$download_url"
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Failed to download $tool_name from $download_url${NC}"
@@ -342,7 +362,7 @@ install_tool() {
     # Handle executable files directly (for MUSCLE)
     elif [[ "$tool_name" = "MUSCLE" ]]; then
         echo -e "${YELLOW}Downloading $tool_name binary...${NC}"
-        $DOWNLOADER "$TOOLS_DIR/$tool_dir_name/$binary_name" "$download_url"
+        download_with_fallback "$TOOLS_DIR/$tool_dir_name/$binary_name" "$download_url"
 
         if [ $? -ne 0 ]; then
             echo -e "${RED}Failed to download $tool_name from $download_url${NC}"

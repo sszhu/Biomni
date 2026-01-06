@@ -17,6 +17,32 @@ TOOLS_DIR=""
 echo -e "${YELLOW}=== Biomni Environment Setup ===${NC}"
 echo -e "${BLUE}This script will set up a comprehensive bioinformatics environment with various tools and packages.${NC}"
 
+# Function to handle errors (defined early for use in installers)
+handle_error() {
+    local exit_code=$1
+    local error_message=$2
+    local optional=${3:-false}
+
+    if [ $exit_code -ne 0 ]; then
+        echo -e "${RED}Error: $error_message${NC}"
+        if [ "$optional" = true ]; then
+            echo -e "${YELLOW}Continuing with setup as this component is optional.${NC}"
+            return 0
+        else
+            if [ -z "$NON_INTERACTIVE" ]; then
+                read -p "Continue with setup? (y/n) " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    echo -e "${RED}Setup aborted.${NC}"
+                    exit 1
+                fi
+            else
+                echo -e "${YELLOW}Non-interactive mode: continuing despite error.${NC}"
+            fi
+        fi
+    fi
+    return $exit_code
+}
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -56,43 +82,70 @@ done
 
 install_micromamba() {
     echo -e "${YELLOW}Installing micromamba...${NC}"
-    # Determine platform tag for micromamba (linux-64, linux-aarch64, osx-64, osx-arm64)
+    # Preferred: official installer script
+    if curl -L micro.mamba.pm/install.sh | bash; then
+        # Installer places micromamba under ~/.local/bin by default
+        export PATH="$HOME/.local/bin:$PATH"
+        if command -v micromamba &> /dev/null; then
+            echo -e "${GREEN}micromamba installed via installer at $(command -v micromamba)${NC}"
+            return 0
+        fi
+        echo -e "${YELLOW}Installer completed but micromamba not on PATH; attempting fallbacks...${NC}"
+    else
+        echo -e "${YELLOW}Installer script failed; attempting fallbacks...${NC}"
+    fi
+
+    # Fallbacks
+    # Determine platform tag for direct binary methods (linux-64, linux-aarch64, osx-64, osx-arm64)
     local uname_s uname_m platform_tag
     uname_s=$(uname -s)
     uname_m=$(uname -m)
     case "$uname_s" in
         Linux)
             case "$uname_m" in
-                x86_64|amd64)
-                    platform_tag="linux-64" ;;
-                aarch64|arm64)
-                    platform_tag="linux-aarch64" ;;
-                *)
-                    platform_tag="linux-64" ;;
+                x86_64|amd64) platform_tag="linux-64" ;;
+                aarch64|arm64) platform_tag="linux-aarch64" ;;
+                *) platform_tag="linux-64" ;;
             esac ;;
         Darwin)
             case "$uname_m" in
-                x86_64)
-                    platform_tag="osx-64" ;;
-                arm64)
-                    platform_tag="osx-arm64" ;;
-                *)
-                    platform_tag="osx-64" ;;
+                x86_64) platform_tag="osx-64" ;;
+                arm64) platform_tag="osx-arm64" ;;
+                *) platform_tag="osx-64" ;;
             esac ;;
-        *)
-            platform_tag="linux-64" ;;
+        *) platform_tag="linux-64" ;;
     esac
+
     local dest_dir="$HOME/.local/bin"
     mkdir -p "$dest_dir"
-    # Download and extract micromamba binary
-    curl -Ls "https://micro.mamba.pm/api/micromamba/${platform_tag}/latest" | tar -xvj -C "$dest_dir" --strip-components=2 bin/micromamba
-    handle_error $? "Failed to download/extract micromamba." false
-    export PATH="$dest_dir:$PATH"
-    if command -v micromamba &> /dev/null; then
-        echo -e "${GREEN}micromamba installed at $(command -v micromamba)${NC}"
+
+    # Fallback 1: Direct binary from GitHub releases
+    local gh_url="https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-${platform_tag}"
+    if curl -L -o "$dest_dir/micromamba" "$gh_url" && chmod +x "$dest_dir/micromamba"; then
+        export PATH="$dest_dir:$PATH"
+        if command -v micromamba &> /dev/null; then
+            echo -e "${GREEN}micromamba installed via GitHub releases at $(command -v micromamba)${NC}"
+            return 0
+        fi
     else
-        echo -e "${RED}micromamba installation did not succeed.${NC}"
+        echo -e "${YELLOW}GitHub release fallback failed; checking conda-based install...${NC}"
     fi
+
+    # Fallback 2: Install via conda if available
+    if command -v conda &> /dev/null; then
+        echo -e "${YELLOW}Attempting 'conda install -n base -c conda-forge micromamba'...${NC}"
+        conda install -n base -c conda-forge -y micromamba || true
+        if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/bin" ]; then
+            export PATH="$CONDA_PREFIX/bin:$PATH"
+        fi
+        if command -v micromamba &> /dev/null; then
+            echo -e "${GREEN}micromamba installed via conda at $(command -v micromamba)${NC}"
+            return 0
+        fi
+    fi
+
+    echo -e "${RED}micromamba installation did not succeed via installer or fallbacks. Please install manually: https://mamba.readthedocs.io${NC}"
+    return 1
 }
 
 install_uv() {
@@ -143,6 +196,18 @@ configure_shell_profile() {
             echo -e "${YELLOW}CLI tools PATH already present in $profile_file${NC}"
         fi
     fi
+
+    # Ensure ~/.local/bin is on PATH (for micromamba/uv)
+    local local_bin="$HOME/.local/bin"
+    local local_bin_line="export PATH=\"$local_bin:\$PATH\""
+    mkdir -p "$local_bin"
+    if ! grep -q "$local_bin" "$profile_file" && ! grep -Fq "$local_bin_line" "$profile_file"; then
+        echo "# Biomni: user-local bin path (micromamba/uv)" >> "$profile_file"
+        echo "$local_bin_line" >> "$profile_file"
+        echo -e "${GREEN}Added ~/.local/bin to PATH in $profile_file${NC}"
+    else
+        echo -e "${YELLOW}~/.local/bin already present in PATH in $profile_file${NC}"
+    fi
 }
 
 # Ensure Python is installed in the environment
@@ -164,8 +229,12 @@ ensure_r_in_env() {
 }
 
 # Ensure micromamba is available
+configure_shell_profile
 if ! command -v micromamba &> /dev/null; then
-    install_micromamba
+    if ! install_micromamba; then
+        echo -e "${RED}micromamba is not available after installation attempts; cannot proceed with environment creation.${NC}"
+        exit 1
+    fi
 fi
 
 # Ensure uv is available
@@ -173,32 +242,7 @@ if ! command -v uv &> /dev/null; then
     install_uv
 fi
 
-# Function to handle errors
-handle_error() {
-    local exit_code=$1
-    local error_message=$2
-    local optional=${3:-false}
-
-    if [ $exit_code -ne 0 ]; then
-        echo -e "${RED}Error: $error_message${NC}"
-        if [ "$optional" = true ]; then
-            echo -e "${YELLOW}Continuing with setup as this component is optional.${NC}"
-            return 0
-        else
-            if [ -z "$NON_INTERACTIVE" ]; then
-                read -p "Continue with setup? (y/n) " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    echo -e "${RED}Setup aborted.${NC}"
-                    exit 1
-                fi
-            else
-                echo -e "${YELLOW}Non-interactive mode: continuing despite error.${NC}"
-            fi
-        fi
-    fi
-    return $exit_code
-}
+# (handler defined earlier)
 
 
 # Function to install a specific environment file using micromamba
@@ -260,7 +304,7 @@ install_cli_tools() {
     export BIOMNI_AUTO_INSTALL=1
 
     # Run the CLI tools installer
-    bash install_cli_tools.sh
+    bash "$SCRIPT_DIR/install_cli_tools.sh"
     handle_error $? "Failed to install CLI tools." true
 
     if [ $? -eq 0 ]; then
@@ -368,16 +412,16 @@ main() {
     fi
 
     # Step 4: Install Python packages with uv (if requirements.txt exists)
-    if [ -f "requirements.txt" ] && [ "$NO_PYTHON" != true ]; then
+    if [ -f "$SCRIPT_DIR/requirements.txt" ] && [ "$NO_PYTHON" != true ]; then
         echo -e "\n${YELLOW}Step 4: Installing Python packages with uv...${NC}"
         if command -v python3 &> /dev/null; then
             env_python=$(which python3)
-            uv pip install --python "$env_python" -r requirements.txt
+            uv pip install --python "$env_python" -r "$SCRIPT_DIR/requirements.txt"
             handle_error $? "Failed to install Python packages with uv." false
         else
             echo -e "${RED}Python interpreter not found in the activated environment; skipping uv installation.${NC}"
         fi
-    elif [ -f "requirements.txt" ] && [ "$NO_PYTHON" = true ]; then
+    elif [ -f "$SCRIPT_DIR/requirements.txt" ] && [ "$NO_PYTHON" = true ]; then
         echo -e "${YELLOW}--no-python flag: skipping uv Python package installation.${NC}"
     fi
 
