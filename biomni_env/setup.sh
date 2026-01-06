@@ -228,6 +228,60 @@ ensure_r_in_env() {
     fi
 }
 
+# Ensure C++ runtime libraries are present (fixes GLIBCXX runtime errors)
+ensure_cxx_runtime_libs() {
+    if [[ "$(uname)" != "Darwin" ]]; then
+        echo -e "${YELLOW}Ensuring C++ runtime libraries (libstdcxx-ng, libgcc-ng) are installed...${NC}"
+        micromamba install -y -n biomni_e1 -c conda-forge libstdcxx-ng libgcc-ng
+        handle_error $? "Failed to install C++ runtime libraries (libstdcxx-ng, libgcc-ng)." true
+    fi
+}
+
+# Ensure 'packaging' module is available for Python libs (langchain_core dependency)
+ensure_packaging() {
+    if command -v python3 &> /dev/null; then
+        python3 - <<'PY'
+try:
+    import packaging
+    print("packaging ready")
+except Exception as e:
+    raise SystemExit(1)
+PY
+        if [ $? -ne 0 ]; then
+            echo -e "${YELLOW}Installing missing 'packaging' module...${NC}"
+            env_python=$(which python3)
+            if command -v uv &> /dev/null; then
+                uv pip install --python "$env_python" packaging
+            else
+                python3 -m pip install -U packaging
+            fi
+        fi
+    fi
+}
+
+# Ensure pandas can import; if it fails, switch to conda-forge builds
+ensure_pandas_compat() {
+    if command -v python3 &> /dev/null; then
+        python3 - <<'PY'
+import sys
+try:
+    import pandas as pd
+    print("Pandas ready:", pd.__version__)
+    sys.exit(0)
+except Exception as e:
+    print("Pandas import failed:", e)
+    sys.exit(1)
+PY
+        if [ $? -ne 0 ]; then
+            echo -e "${YELLOW}Reinstalling pandas/numpy/scipy via conda-forge to resolve binary compatibility...${NC}"
+            # Uninstall pip versions if present
+            python3 -m pip uninstall -y pandas numpy scipy >/dev/null 2>&1 || true
+            micromamba clean --all -y || true
+            micromamba install -y -n biomni_e1 --override-channels -c conda-forge pandas numpy scipy
+        fi
+    fi
+}
+
 # Ensure micromamba is available
 configure_shell_profile
 if ! command -v micromamba &> /dev/null; then
@@ -386,6 +440,12 @@ main() {
     micromamba activate biomni_e1
     handle_error $? "Failed to activate biomni_e1 environment."
 
+    # Prefer environment-provided shared libraries (fixes GLIBCXX lookup issues on some systems)
+    if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/lib" ]; then
+        export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:${LD_LIBRARY_PATH:-}"
+        echo -e "${YELLOW}Preferring env shared libs via LD_LIBRARY_PATH=$CONDA_PREFIX/lib${NC}"
+    fi
+
     # Ensure core runtimes are present
     if [ "$NO_PYTHON" != true ]; then
         ensure_python_in_env
@@ -397,6 +457,9 @@ main() {
     else
         echo -e "${YELLOW}--no-r flag: skipping R auto-install.${NC}"
     fi
+
+    # Ensure C++ runtime libraries for Python wheels needing newer GLIBCXX
+    ensure_cxx_runtime_libs
 
     # Step 3: Install additional R packages through R's package manager (optional)
     echo -e "\n${YELLOW}Step 3: Installing additional R packages through R's package manager...${NC}"
@@ -416,7 +479,11 @@ main() {
         echo -e "\n${YELLOW}Step 4: Installing Python packages with uv...${NC}"
         if command -v python3 &> /dev/null; then
             env_python=$(which python3)
-            uv pip install --python "$env_python" -r "$SCRIPT_DIR/requirements.txt"
+            # Filter out packages provided by conda to avoid ABI conflicts
+            tmp_req="$SCRIPT_DIR/.requirements.no-conda.txt"
+            grep -Ev '^(pandas|numpy|scipy)([=<>]|$)' "$SCRIPT_DIR/requirements.txt" > "$tmp_req"
+            uv pip install --python "$env_python" -r "$tmp_req"
+            rm -f "$tmp_req"
             handle_error $? "Failed to install Python packages with uv." false
         else
             echo -e "${RED}Python interpreter not found in the activated environment; skipping uv installation.${NC}"
@@ -424,6 +491,12 @@ main() {
     elif [ -f "$SCRIPT_DIR/requirements.txt" ] && [ "$NO_PYTHON" = true ]; then
         echo -e "${YELLOW}--no-python flag: skipping uv Python package installation.${NC}"
     fi
+
+    # Ensure packaging is present for langchain_core
+    ensure_packaging
+
+    # Verify pandas import; if it fails, install conda-forge builds
+    ensure_pandas_compat
 
     # Step 5: Install CLI tools
     echo -e "\n${YELLOW}Step 5: Installing command-line bioinformatics tools...${NC}"

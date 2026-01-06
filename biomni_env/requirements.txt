@@ -1,7 +1,4 @@
-numpy
-pandas
 matplotlib
-scipy
 statsmodels
 scikit-learn
 gradio
@@ -22,6 +19,7 @@ tqdm
 seaborn
 networkx
 requests
+packaging
 pyyaml
 jupyter
 jupyterlab-vim
