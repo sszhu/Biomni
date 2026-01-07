@@ -14,6 +14,11 @@ boto3
 botocore
 openai
 beautifulsoup4
+scipy
+pandas
+numpy
+weasyprint
+gseapy
 lxml
 tqdm
 seaborn
@@ -93,5 +98,6 @@ fanc
 nnunet
 nibabel
 nilearn
+tencent-cos-cli
 git+https://github.com/pylabrobot/pylabrobot.git
 git+https://github.com/YosefLab/popV.git@refs/pull/100/head
